@@ -224,10 +224,76 @@ router.post('/', async (req, res) => {
         })
 })
 
-// Post article
+// edit category for given article
+function asyncHelper(categoryId, req, res) {
+    knex('categories_articles')
+        .update('category_id', categoryId)
+        .where('categories_articles.article_id', req.params.id)
+        .then(() => {
+            return res.redirect('/articles')
+        })
+}
 
-// Update category or title of article with id == req.params.id
+// Updates title of matching article id
+function updateHelper(req, res) {
+    knex('articles') 
+        .update('title', req.body.title, '*')
+        .where('id', req.params.id)
+        .then(() => {
+            knex('categories')
+                .where('category', req.body.category)
+                .first()
+                .then(async selectedCategory => {
+                    categoryId = -1 // placeholder value for categoryId
+                    if (selectedCategory == undefined) {
+                        // if that category doesn't exist, insert it and update categoryId with asyncHelper
+                        await knex('categories')
+                            .insert({ category: req.body.category }, '*')
+                            .then(insertedCategory => {
+                                categoryId = insertedCategory[0].id
+                            })
+                            .then(() => {
+                                return asyncHelper(categoryId, req, res)
+                            })
+                    } else { // else just update categoryId
+                        categoryId = selectedCategory.id
+                        return asyncHelper(categoryId, req, res)
+                    }
+                })
+        })
+}
+
+// update category or title of article with id == req.params.id
+router.put('/:id', async(req, res) => {
+    req.body.title = req.body.title.trim()
+    req.body.category = req.body.category.trim()
+    if (req.body.category == '') { // category is unchanged
+        await knex('categories_articles')
+        .first()
+        .then((grabCategoryId) => {
+            knex('categories')
+                .where('id', grabCategoryId.id)
+                .first()
+                .then(grabCategory => {
+                    req.body.category = grabCategory.category; // set it back to its category because user left unchanged
+                })
+                .then(() => {
+                    return updateHelper(req, res)
+                })
+        })
+    } else {
+        return updateHelper(req, res)
+    }
+})
 
 // Delete article
+router.delete('/:id', (req, res) => {
+    knex('articles')
+        .where('id', req.params.id)
+        .del()
+        .then(result => {
+            res.json(result)
+        })
+})
 
 module.exports = router;
